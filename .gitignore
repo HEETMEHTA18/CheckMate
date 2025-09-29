@@ -25,3 +25,19 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# Editor
+.vscode/
+.idea/
+*.swp
+# OS
+.DS_Store
+Thumbs.db
+# Test
+coverage/
+# Logs
+logs.json
+*.log
+# Python OCR microservice (if added)
+__pycache__/
+ocr-server.log
