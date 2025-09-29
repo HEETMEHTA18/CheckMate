@@ -1,6 +1,7 @@
 import { type NextRequest, NextResponse } from "next/server";
 import { verifyDocument } from "@/lib/logic";
-import { validCertificates, normalizeName } from "@/lib/sample-db";
+import { normalizeName } from "@/lib/sample-db";
+import { readCerts } from "@/lib/cert-store";
 import { promises as fs } from "fs";
 import path from "path";
 // Small helper: retry fetch to OCR microservice with backoff
@@ -322,12 +323,13 @@ export async function POST(req: NextRequest) {
         return false;
       }
 
-      // Try to find a certificate in the DB that best matches the input name
-      function bestCertificateMatch(inputName: string) {
+        // Try to find a certificate in the DB that best matches the input name
+      async function bestCertificateMatch(inputName: string) {
+        const certs = await readCerts();
         const normInput = normalizeName(inputName || "");
         const inputTokens = normInput.split(" ").filter(Boolean);
         let best: { cert: any; overlap: number } | null = null;
-        for (const cert of validCertificates) {
+        for (const cert of certs) {
           const certTokens = (cert.name || "").split(" ").filter(Boolean);
           const overlap = inputTokens.filter(t => certTokens.includes(t)).length;
           if (!best || overlap > best.overlap) best = { cert, overlap };
@@ -344,14 +346,15 @@ export async function POST(req: NextRequest) {
         // filename may contain certificate id
         const upfname = (filename || "").toUpperCase();
         let certFromFilename = null;
-        for (const cert of validCertificates) {
+        const certs = await readCerts();
+        for (const cert of certs) {
           if (cert.id && upfname.includes(cert.id.toUpperCase())) { certFromFilename = cert; break; }
         }
         if (certFromFilename) {
           chosenExtractedName = certFromFilename.name;
           extractionSource = extractionSource ? extractionSource + ",filename-db" : "filename-db";
         } else {
-          const dbMatch = bestCertificateMatch(inputName);
+          const dbMatch = await bestCertificateMatch(inputName);
           if (dbMatch) {
             chosenExtractedName = dbMatch.name;
             extractionSource = extractionSource ? extractionSource + ",db-match" : "db-match";

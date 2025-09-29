@@ -108,6 +108,32 @@ export function CheckmateUpload() {
     }
   }
 
+  async function registerCert() {
+    if (!result) return;
+    const nameToRegister = (result.normalizedNames?.extracted as string) || name || result.extracted?.chosen || '';
+    if (!nameToRegister) {
+      setError('No name available to register');
+      return;
+    }
+    try {
+      setLoading(true);
+      const res = await fetch('/api/certificates', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ name: nameToRegister, eligibility: true }),
+      });
+      const j = await res.json();
+      if (!res.ok) throw new Error(j?.error || 'Failed to register');
+      setIdWarning(`Registered certificate ${j.cert?.id}`);
+      // Refresh matches UI by triggering name state update
+      setName(nameToRegister);
+    } catch (e: any) {
+      setError(e?.message || 'Register failed');
+    } finally {
+      setLoading(false);
+    }
+  }
+
   return (
     <div className="flex flex-col gap-6">
   <form onSubmit={onSubmit} className="flex flex-col gap-4">
@@ -187,6 +213,12 @@ export function CheckmateUpload() {
             <pre className="mt-2 overflow-auto text-xs" style={{ maxHeight: 320 }}>
 {JSON.stringify(result, null, 2)}
             </pre>
+          </div>
+          <div className="mt-3 flex gap-2">
+            <Button onClick={registerCert}>Register certificate</Button>
+            <Button variant="secondary" onClick={() => { navigator.clipboard?.writeText(JSON.stringify(result)); }}>
+              Copy JSON
+            </Button>
           </div>
         </div>
       ) : null}
