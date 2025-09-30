@@ -160,6 +160,98 @@ export async function POST(req: NextRequest) {
   let inputNameVal: string | null = null;
   let filenameVal: string | null = null;
   try {
+    const incomingContentType = req.headers.get('content-type') || '';
+
+    // If the client performed OCR in-browser, it will POST JSON: { name, extractedText, filename }
+    if (incomingContentType.includes('application/json')) {
+      const body = await req.json();
+      const inputName = (body?.name as string) || "";
+      inputNameVal = inputName;
+      const inputEmail = (body?.email as string) || "";
+      const filename = (body?.filename as string) || '';
+      filenameVal = filename;
+      const extractedText = (body?.extractedText as string) || '';
+
+      // Perform lightweight extraction using existing helper
+      const text = extractedText || '';
+      let extracted = extractFieldsFromText(text, inputName);
+      let extractionSource = 'client-ocr';
+
+      // Helper to detect header-like names (reuse logic from below)
+      function isHeaderLikeLocal(s?: string) {
+        if (!s) return true;
+        const up = s.toUpperCase();
+        if (up.includes("SCHOLARSHIP") || up.includes("AWARD") || up.includes("APPLICATION") || up.includes("TOTAL VALUE") || up.includes("NAME OF")) return true;
+        const digitCount = (s.match(/\d/g) || []).length;
+        if (digitCount >= 3) return true;
+        if (s.length > 120) return true;
+        return false;
+      }
+
+      // Minimal best-certificate match used for fallback
+      async function bestCertificateMatchLocal(inputName: string) {
+        const certs = await readCerts();
+        const normInput = normalizeName(inputName || "");
+        const inputTokens = normInput.split(" ").filter(Boolean);
+        let best: { cert: any; overlap: number } | null = null;
+        for (const cert of certs) {
+          const certTokens = (cert.name || "").split(" ").filter(Boolean);
+          const overlap = inputTokens.filter((t) => certTokens.includes(t)).length;
+          if (!best || overlap > best.overlap) best = { cert, overlap };
+        }
+        if (best && best.overlap >= 2) return best.cert;
+        if (best && inputTokens.length > 0 && best.overlap / inputTokens.length >= 0.6) return best.cert;
+        return null;
+      }
+
+      // Decide chosenExtractedName using extracted and DB/filename fallbacks
+      let chosenExtractedName = extracted.name;
+      if (!chosenExtractedName || isHeaderLikeLocal(chosenExtractedName)) {
+        // try filename-based DB match
+        const upfname = (filename || '').toUpperCase();
+        let certFromFilename = null;
+        const certs = await readCerts();
+        for (const cert of certs) {
+          if (cert.id && upfname.includes(cert.id.toUpperCase())) { certFromFilename = cert; break; }
+        }
+        if (certFromFilename) {
+          chosenExtractedName = certFromFilename.name;
+          extractionSource = extractionSource ? extractionSource + ',filename-db' : 'filename-db';
+        } else {
+          const dbMatch = await bestCertificateMatchLocal(inputName);
+          if (dbMatch) {
+            chosenExtractedName = dbMatch.name;
+            extractionSource = extractionSource ? extractionSource + ',db-match' : 'db-match';
+          }
+        }
+      }
+
+      // Build verify input and run verification
+      const verifyInput = { name: inputName, extractedName: chosenExtractedName, file: { bytes: Buffer.alloc(0), filename } };
+      const verifyOut = await verifyDocument(verifyInput as any);
+
+      const result = {
+        ...verifyOut,
+        extractionSource,
+        textSample: (text || '').slice(0, 500),
+        extracted: { ...extracted, chosen: chosenExtractedName },
+        input: { name: inputName, email: inputEmail },
+        file: { filename },
+      };
+
+      // Log attempt
+      try {
+        const logPath = path.join(process.cwd(), "logs.json");
+        let logs: any[] = [];
+        try { const data = await fs.readFile(logPath, 'utf8'); logs = JSON.parse(data); } catch {}
+        logs.push({ date: new Date().toISOString(), input: { name: inputName, email: inputEmail }, extracted, matches: { name: verifyOut.ownerStatus.pass }, file: filename || null, extractionSource });
+        await fs.writeFile(logPath, JSON.stringify(logs, null, 2), 'utf8');
+      } catch (e) {}
+
+      return NextResponse.json(result);
+    }
+
+    // Otherwise assume form-data upload (existing flow)
     const form = await req.formData();
     const inputName = (form.get("name") as string) || "";
     inputNameVal = inputName;
@@ -173,13 +265,12 @@ export async function POST(req: NextRequest) {
     }
     const uploadedFile = file;
     const bytes = await uploadedFile.arrayBuffer();
-  const filename = uploadedFile.name;
-  filenameVal = filename;
-      let extracted: { name?: string; email?: string } = {};
-      let extractionSource = "";
-      let text = "";
-
-      const mime = (uploadedFile.type || "").toString();
+    const filename = uploadedFile.name;
+    filenameVal = filename;
+    let extracted: { name?: string; email?: string } = {};
+    let extractionSource = "";
+    let text = "";
+    const mime = (uploadedFile.type || "").toString();
       // include mime in logs for debugging
       // image OCR path
       if (mime.startsWith("image/")) {
@@ -390,12 +481,14 @@ export async function POST(req: NextRequest) {
       // As a last-ditch effort, search the PDF buffer for a normalized input name
       // or its token subsequences and use it as the extracted name.
       if ((!chosenExtractedName || isHeaderLike(chosenExtractedName)) && bytes) {
+        // prepare a buffer-string in outer scope for multiple fallbacks
+        let bufStr = '';
         try {
           // bytes is an ArrayBuffer from File.arrayBuffer(); convert safely to Buffer
           const ab = bytes as ArrayBuffer;
           const rawBuf = Buffer.from(new Uint8Array(ab));
           if (rawBuf.byteLength > 0) {
-            const bufStr = rawBuf.toString('utf8').toUpperCase();
+            bufStr = rawBuf.toString('utf8').toUpperCase();
             const normInput = normalizeName(inputName || "");
             if (normInput) {
               const toks = normInput.split(' ').filter(Boolean);
@@ -443,6 +536,47 @@ export async function POST(req: NextRequest) {
           }
         } catch (bufErr) {
           console.warn('Raw-buffer fallback failed', bufErr);
+        }
+        // Additional fuzzy-substring fallback: sometimes names appear in PDF bytes or OCR text
+        // with punctuation/spacing differences. Normalize to letters-only and do a
+        // sliding-window Levenshtein search to catch near-matches (small OCR errors).
+        try {
+          function normalizeLetters(s: string) {
+            return (s || '').toUpperCase().replace(/[^A-Z]/g, '');
+          }
+          function fuzzySubstringSearch(hay: string, needle: string, maxDist: number) {
+            if (!hay || !needle) return false;
+            const H = normalizeLetters(hay);
+            const N = normalizeLetters(needle);
+            if (!H || !N) return false;
+            const n = N.length;
+            if (n === 0) return false;
+            // scan windows of length n and allow small variations
+            for (let i = 0; i + n <= H.length; i++) {
+              const sub = H.substr(i, n);
+              const d = levenshtein(sub, N);
+              if (d <= maxDist) return true;
+            }
+            return false;
+          }
+
+          const needle = normalizeName(inputName || "");
+          const needleLetters = needle.replace(/\s+/g, '');
+          if (needleLetters.length >= 3 && !chosenExtractedName) {
+            const maxDist = Math.max(1, Math.floor(needleLetters.length * 0.15));
+            // check OCR text first (if any)
+            if (text && fuzzySubstringSearch(text, needle, maxDist)) {
+              chosenExtractedName = inputName;
+              extractionSource = extractionSource ? extractionSource + ',fuzzy-substr-text' : 'fuzzy-substr-text';
+            }
+            // then check raw PDF buffer string
+            if (!chosenExtractedName && bufStr && fuzzySubstringSearch(bufStr, needle, maxDist)) {
+              chosenExtractedName = inputName;
+              extractionSource = extractionSource ? extractionSource + ',fuzzy-substr-raw' : 'fuzzy-substr-raw';
+            }
+          }
+        } catch (e) {
+          // ignore fuzzy fallback errors
         }
       }
 

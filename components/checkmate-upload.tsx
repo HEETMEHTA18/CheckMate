@@ -5,7 +5,9 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Separator } from "@/components/ui/separator"
+import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card"
 import { useState, useMemo } from "react"
+// We'll dynamically import tesseract.js at runtime when needed to keep bundle small
 import { VerificationReport } from "@/components/verification-report"
 import { cn } from "@/lib/utils"
 
@@ -81,14 +83,66 @@ export function CheckmateUpload() {
 
     try {
       setLoading(true)
-      const form = new FormData()
-      form.append("file", file)
-      form.append("name", name)
 
-      const res = await fetch("/api/verify-proxy", {
-        method: "POST",
-        body: form,
-      })
+      // If the user selected a file and it's an image or pdf, attempt client-side OCR
+      // We'll dynamically import tesseract.js to avoid bundling it server-side.
+      const lower = file.name.toLowerCase()
+      const isImage = lower.endsWith('.png') || lower.endsWith('.jpg') || lower.endsWith('.jpeg') || lower.endsWith('.tiff') || lower.endsWith('.bmp')
+      const isPdf = lower.endsWith('.pdf')
+
+      // Default: upload file as before
+      let res: Response
+
+      if ((isImage || isPdf) && typeof window !== 'undefined') {
+        try {
+          const tesseract = await import('tesseract.js')
+          // cast to any to avoid bundling TypeScript types for client-only dynamic import
+          const createWorker: any = (tesseract as any).createWorker
+          const worker: any = createWorker({ logger: (m: any) => { /* optional: progress */ } })
+          await worker.load()
+          await worker.loadLanguage('eng')
+          await worker.initialize('eng')
+
+          // For PDFs, we read as ArrayBuffer; for images, use blob URL
+          let extractedText = ''
+          if (isPdf) {
+            const ab = await file.arrayBuffer()
+            // Tesseract.js can't parse multi-page PDFs directly in browser reliably;
+            // use a simple text extraction approach: attempt OCR on first page image fallback
+            // Here we still attempt to run OCR over the raw PDF binary which may fail on some browsers.
+            const blob = new Blob([ab], { type: 'application/pdf' })
+            const url = URL.createObjectURL(blob)
+            const { data } = await worker.recognize(url)
+            extractedText = data?.text || ''
+            URL.revokeObjectURL(url)
+          } else {
+            const url = URL.createObjectURL(file)
+            const { data } = await worker.recognize(url)
+            extractedText = data?.text || ''
+            URL.revokeObjectURL(url)
+          }
+
+          await worker.terminate()
+
+          // Send extracted text to server (no secret exposure)
+          res = await fetch('/api/verify-proxy', {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ name, extractedText, filename: file.name }),
+          })
+        } catch (ocrErr) {
+          // OCR failed in browser; fallback to uploading original file
+          const form = new FormData()
+          form.append('file', file)
+          form.append('name', name)
+          res = await fetch('/api/verify-proxy', { method: 'POST', body: form })
+        }
+      } else {
+        const form = new FormData()
+        form.append('file', file)
+        form.append('name', name)
+        res = await fetch('/api/verify-proxy', { method: 'POST', body: form })
+      }
       if (!res.ok) {
           const contentType = res.headers.get('content-type') || '';
           if (contentType.includes('application/json')) {
@@ -135,8 +189,14 @@ export function CheckmateUpload() {
   }
 
   return (
-    <div className="flex flex-col gap-6">
-  <form onSubmit={onSubmit} className="flex flex-col gap-4">
+    <Card>
+      <CardHeader>
+        <CardTitle>Verify a Document</CardTitle>
+        <div className="text-sm text-muted-foreground">Upload a certificate (PDF or image) and enter the owner's full name.</div>
+      </CardHeader>
+      <CardContent>
+        <div className="flex flex-col gap-6">
+          <form onSubmit={onSubmit} className="flex flex-col gap-4">
         <div className="flex flex-col gap-2">
           <Label htmlFor="name">Student Full Name</Label>
           <Input
@@ -150,12 +210,22 @@ export function CheckmateUpload() {
           />
           {/* Real-time feedback: show possible matches */}
           {name.trim() && matches.length > 0 && (
-            <div className="text-xs text-muted-foreground mt-1">
-              Possible match{matches.length > 1 ? "es" : ""}: {matches.join(", ")}
+            <div className="flex flex-wrap gap-2 mt-2">
+              {matches.map((m) => (
+                <div key={m} className="text-xs px-2 py-1 rounded-md bg-muted/20 text-muted-foreground">{m}</div>
+              ))}
             </div>
           )}
           {name.trim() && matches.length === 0 && (
-            <div className="text-xs text-destructive mt-1">No matching certificate found for this name.</div>
+            <div className="flex items-center gap-3 mt-2">
+              <div>
+                <div className="text-sm text-destructive">No matching certificate found.</div>
+                <div className="text-xs text-muted-foreground">Try different spacing/capitalization or try abbreviations (e.g., omit middle names).</div>
+              </div>
+              {result?.normalizedNames?.extracted ? (
+                <Button size="sm" variant="secondary" onClick={registerCert} className="ml-2">Register extracted name</Button>
+              ) : null}
+            </div>
           )}
         </div>
 
@@ -183,45 +253,47 @@ export function CheckmateUpload() {
           {hashWarning ? <span className="text-yellow-600 text-xs font-semibold">{hashWarning}</span> : null}
           {idWarning ? <span className="text-yellow-600 text-xs font-semibold">{idWarning}</span> : null}
         </div>
-      </form>
+          </form>
 
-      <Separator className="bg-border" />
+          <Separator className="bg-border" />
 
-      {result ? <VerificationReport result={result} inputName={name} /> : null}
+          {result ? <VerificationReport result={result} inputName={name} /> : null}
 
-      {/* Diagnostics box: show extraction source, text sample, extracted fields and raw JSON */}
-      {result ? (
-        <div className="mt-4 p-3 border rounded bg-muted/30">
-          <div className="flex items-center justify-between">
-            <div>
-              <strong>Extraction Source:</strong>{' '}
-              <span className="ml-1">{result.extractionSource ?? 'n/a'}</span>
-            </div>
-            <div>
-              <strong>Text Sample:</strong>{' '}
-              <span className="ml-1">{result.textSample ? result.textSample.slice(0, 120) : 'n/a'}</span>
-            </div>
-          </div>
+          {/* Diagnostics box: show extraction source, text sample, extracted fields and raw JSON */}
+          {result && result.ownerStatus && result.ownerStatus.pass === false ? (
+            <div className="mt-4 p-3 border rounded bg-muted/30">
+              <div className="flex items-center justify-between">
+                <div>
+                  <strong>Extraction Source:</strong>{' '}
+                  <span className="ml-1">{result.extractionSource ?? 'n/a'}</span>
+                </div>
+                <div>
+                  <strong>Text Sample:</strong>{' '}
+                  <span className="ml-1">{result.textSample ? result.textSample.slice(0, 120) : 'n/a'}</span>
+                </div>
+              </div>
 
-          <div className="mt-2">
-            <strong>Extracted:</strong>{' '}
-            <span className="ml-1">{result.normalizedNames?.extracted ?? (result.extracted ? JSON.stringify(result.extracted) : '(none)')}</span>
-          </div>
+              <div className="mt-2">
+                <strong>Extracted:</strong>{' '}
+                <span className="ml-1">{result.normalizedNames?.extracted ?? (result.extracted ? JSON.stringify(result.extracted) : '(none)')}</span>
+              </div>
 
-          <div className="mt-3">
-            <strong>Full API response</strong>
-            <pre className="mt-2 overflow-auto text-xs" style={{ maxHeight: 320 }}>
+              <div className="mt-3">
+                <strong>Full API response</strong>
+                <pre className="mt-2 overflow-auto text-xs" style={{ maxHeight: 320 }}>
 {JSON.stringify(result, null, 2)}
-            </pre>
-          </div>
-          <div className="mt-3 flex gap-2">
-            <Button onClick={registerCert}>Register certificate</Button>
-            <Button variant="secondary" onClick={() => { navigator.clipboard?.writeText(JSON.stringify(result)); }}>
-              Copy JSON
-            </Button>
-          </div>
+                </pre>
+              </div>
+              <div className="mt-3 flex gap-2">
+                <Button onClick={registerCert}>Register certificate</Button>
+                <Button variant="secondary" onClick={() => { navigator.clipboard?.writeText(JSON.stringify(result)); }}>
+                  Copy JSON
+                </Button>
+              </div>
+            </div>
+          ) : null}
         </div>
-      ) : null}
-    </div>
+      </CardContent>
+    </Card>
   )
 }

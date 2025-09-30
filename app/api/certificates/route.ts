@@ -19,3 +19,14 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: e?.message || 'invalid' }, { status: 400 });
   }
 }
+
+export async function DELETE(req: Request) {
+  try {
+    const body = await req.json();
+    if (!body || !body.id) return NextResponse.json({ error: 'id required' }, { status: 400 });
+    await (await import('@/lib/cert-store')).removeCert(body.id);
+    return NextResponse.json({ ok: true });
+  } catch (e: any) {
+    return NextResponse.json({ error: e?.message || 'invalid' }, { status: 400 });
+  }
+}

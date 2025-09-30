@@ -44,4 +44,11 @@ export async function findCertById(id: string) {
   return cur.find(c => c.id === id) || null;
 }
 
+export async function removeCert(id: string) {
+  const cur = await readCerts();
+  const next = cur.filter(c => c.id !== id);
+  await writeCerts(next);
+  return next;
+}
+
 export default { readCerts, writeCerts, addCert, findCertById };

@@ -2,7 +2,15 @@
 
 import * as React from 'react'
 import * as ContextMenuPrimitive from '@radix-ui/react-context-menu'
-import { CheckIcon, ChevronRightIcon, CircleIcon } from 'lucide-react'
+import { CheckIcon, ChevronRightIcon } from 'lucide-react'
+
+function CircleSvg({ className }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" width="16" height="16" aria-hidden>
+      <circle cx="12" cy="12" r="6" />
+    </svg>
+  )
+}
 
 import { cn } from '@/lib/utils'
 
@@ -151,7 +159,7 @@ function ContextMenuCheckboxItem({
       {...props}
     >
       <span className="pointer-events-none absolute left-2 flex size-3.5 items-center justify-center">
-        <ContextMenuPrimitive.ItemIndicator>
+          <ContextMenuPrimitive.ItemIndicator>
           <CheckIcon className="size-4" />
         </ContextMenuPrimitive.ItemIndicator>
       </span>
@@ -175,8 +183,8 @@ function ContextMenuRadioItem({
       {...props}
     >
       <span className="pointer-events-none absolute left-2 flex size-3.5 items-center justify-center">
-        <ContextMenuPrimitive.ItemIndicator>
-          <CircleIcon className="size-2 fill-current" />
+          <ContextMenuPrimitive.ItemIndicator>
+          <CircleSvg className="size-2 fill-current" />
         </ContextMenuPrimitive.ItemIndicator>
       </span>
       {children}

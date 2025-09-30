@@ -1,0 +1,37 @@
+version: "3.8"
+services:
+  postgres:
+    image: postgres:15
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: checkmate
+      POSTGRES_USER: checkmate
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-change-me}
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+
+  ocr:
+    build: ./infra/ocr
+    restart: unless-stopped
+    ports:
+      - "5001:5001"
+    environment:
+      - PORT=5001
+
+  web:
+    build: ./infra/next
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      - OCR_URL=http://ocr:5001/ocr
+      - DATABASE_URL=${DATABASE_URL:-postgres://checkmate:change-me@postgres:5432/checkmate}
+      - VERIFY_KEY=${VERIFY_KEY:-}
+    depends_on:
+      - ocr
+      - postgres
+
+volumes:
+  db-data:

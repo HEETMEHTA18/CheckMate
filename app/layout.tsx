@@ -3,6 +3,7 @@ import { GeistSans } from 'geist/font/sans'
 import { GeistMono } from 'geist/font/mono'
 import { Analytics } from '@vercel/analytics/next'
 import './globals.css'
+import { ThemeProvider } from '@/components/theme-provider'
 
 export const metadata: Metadata = {
   title: 'Check Mate',
@@ -25,8 +26,10 @@ export default function RootLayout({
         <title>Check Mate</title>
       </head>
       <body className={`font-sans ${GeistSans.variable} ${GeistMono.variable}`}>
-        {children}
-        <Analytics />
+        <ThemeProvider attribute="class">
+          {children}
+          <Analytics />
+        </ThemeProvider>
       </body>
     </html>
   )

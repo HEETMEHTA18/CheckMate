@@ -97,8 +97,13 @@ export async function verifyDocument(input: VerifyInput): Promise<VerifyOutput> 
   const certIdFromText = extractCertId(input.extractedName ?? null) || extractCertId((input.extractedName || "") as any)
   const B_bool = !!(certIdFromFilename || certIdFromText)
 
-  // Proposition C: partial evidence - some token overlap (>=1 token) between input and extracted
-  const C_bool = tokensOverlapCount(normInput, normExtracted) >= 1
+  // Proposition C: partial evidence - require >=2 token overlap OR allow 1 if input is a single-token name
+  const C_bool = (() => {
+    const overlap = tokensOverlapCount(normInput, normExtracted)
+    const inputTokens = normInput.split(" ").filter(Boolean).length
+    if (inputTokens <= 1) return overlap >= 1
+    return overlap >= 2
+  })()
 
   // Compose final logic: Y = A OR (B AND C)
   const Y_bool = A_bool || (B_bool && C_bool)
@@ -117,9 +122,9 @@ export async function verifyDocument(input: VerifyInput): Promise<VerifyOutput> 
     A: A_bool ? (1 as 1) : (0 as 0),
     Y: Y_bool ? (1 as 1) : (0 as 0),
     table: [
-      // show canonical rows for A (and illustrative B/C combinations)
-      { A: 0 as 0, Y: (A_bool ? (1 as 1) : (0 as 0)) },
-      { A: 1 as 1, Y: (A_bool ? (1 as 1) : (0 as 0)) },
+      // canonical truth table for Y = A OR (B AND C)
+      { A: 0 as 0, Y: (0 || ((B_bool && C_bool) ? 1 : 0)) as 0 | 1 },
+      { A: 1 as 1, Y: 1 as 1 },
     ] as Array<{ A: 0 | 1; Y: 0 | 1 }>,
   }
 

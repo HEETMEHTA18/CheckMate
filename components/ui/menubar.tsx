@@ -2,7 +2,15 @@
 
 import * as React from 'react'
 import * as MenubarPrimitive from '@radix-ui/react-menubar'
-import { CheckIcon, ChevronRightIcon, CircleIcon } from 'lucide-react'
+import { CheckIcon, ChevronRightIcon } from 'lucide-react'
+
+function CircleSvg({ className }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" width="16" height="16" aria-hidden>
+      <circle cx="12" cy="12" r="6" />
+    </svg>
+  )
+}
 
 import { cn } from '@/lib/utils'
 
@@ -128,7 +136,7 @@ function MenubarCheckboxItem({
       {...props}
     >
       <span className="pointer-events-none absolute left-2 flex size-3.5 items-center justify-center">
-        <MenubarPrimitive.ItemIndicator>
+          <MenubarPrimitive.ItemIndicator>
           <CheckIcon className="size-4" />
         </MenubarPrimitive.ItemIndicator>
       </span>
@@ -152,8 +160,8 @@ function MenubarRadioItem({
       {...props}
     >
       <span className="pointer-events-none absolute left-2 flex size-3.5 items-center justify-center">
-        <MenubarPrimitive.ItemIndicator>
-          <CircleIcon className="size-2 fill-current" />
+          <MenubarPrimitive.ItemIndicator>
+          <CircleSvg className="size-2 fill-current" />
         </MenubarPrimitive.ItemIndicator>
       </span>
       {children}

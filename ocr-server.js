@@ -18,6 +18,11 @@ app.post('/ocr', upload.single('file'), async (req, res) => {
   }
 });
 
+// Health endpoint for orchestrators (Render, etc.)
+app.get('/health', (req, res) => {
+  res.json({ status: 'ok', pid: process.pid, uptime: process.uptime() });
+});
+
 const PORT = process.env.PORT || 5001;
 app.listen(PORT, () => {
   console.log(`OCR server running on port ${PORT}`);
