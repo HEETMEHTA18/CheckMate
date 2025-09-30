@@ -48,9 +48,7 @@ export default async function AdminAuditLog() {
 							<CardTitle className="text-2xl font-bold text-white">Audit Log / Verification History</CardTitle>
 							<div className="flex items-center gap-3">
 								<Link href="/" className="inline-block mt-2 sm:mt-0 bg-white/5 text-white px-4 py-2 rounded font-semibold shadow hover:opacity-90 transition">← Back to Verification</Link>
-								<form action="/admin-audit-log/logout" method="POST">
-									<button type="submit" className="mt-2 sm:mt-0 bg-red-600 text-white px-4 py-2 rounded font-semibold shadow hover:opacity-90 transition">Logout</button>
-								</form>
+								<Link href="/admin-audit-log/logout" className="mt-2 sm:mt-0 inline-block bg-red-600 text-white px-4 py-2 rounded font-semibold shadow hover:opacity-90 transition">Logout</Link>
 							</div>
 						</CardHeader>
 					<CardContent>

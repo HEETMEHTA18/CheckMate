@@ -13,8 +13,9 @@ export async function POST(request: Request) {
   const response = NextResponse.redirect(redirectUrl)
 
   if (password === ADMIN_PASSWORD) {
-    // Set a short token (do not store the password directly)
-    cookies().set("admin_auth", "1", {
+    // Set a short token (do not store the password directly) on the response so
+    // the Set-Cookie header is included with the redirect.
+    response.cookies.set("admin_auth", "1", {
       path: "/",
       httpOnly: true,
       sameSite: "lax",
@@ -22,7 +23,7 @@ export async function POST(request: Request) {
     })
   } else {
     // Ensure cookie is cleared on failed login
-    cookies().set("admin_auth", "", {
+    response.cookies.set("admin_auth", "", {
       path: "/",
       httpOnly: true,
       sameSite: "lax",
