@@ -11,25 +11,65 @@ export type CertRecord = {
 const DATA_DIR = path.join(process.cwd(), 'data');
 const CERT_PATH = path.join(DATA_DIR, 'certificates.json');
 
+// In some serverless hosts (Vercel, Cloud Functions) the filesystem may be
+// read-only or ephemeral. To avoid runtime crashes (ENOENT) when reading or
+// writing `data/certificates.json`, we attempt to use the disk but fall back
+// to an in-memory store if the directory is not writable or creation fails.
+let useMemoryStore = false;
+let inMemoryStore: CertRecord[] | null = null;
+
 async function ensureDataDir() {
+  if (useMemoryStore) return;
   try {
     await fs.mkdir(DATA_DIR, { recursive: true });
-  } catch (e) { }
+  } catch (err: any) {
+    // If creating the directory fails (permission denied, read-only FS),
+    // fall back to in-memory store for the lifetime of the running instance.
+    console.warn('cert-store: cannot create data directory, falling back to memory store:', err?.message || err);
+    useMemoryStore = true;
+    inMemoryStore = inMemoryStore || [];
+  }
 }
 
 export async function readCerts(): Promise<CertRecord[]> {
+  if (inMemoryStore) return inMemoryStore;
   await ensureDataDir();
+  if (useMemoryStore) return (inMemoryStore = inMemoryStore || []);
   try {
     const txt = await fs.readFile(CERT_PATH, 'utf8');
-    return JSON.parse(txt || '[]');
-  } catch (e) {
+    const parsed = JSON.parse(txt || '[]');
+    inMemoryStore = parsed;
+    return parsed;
+  } catch (err: any) {
+    // If file is missing, return empty array and keep an in-memory copy so
+    // subsequent writes use the fallback if required.
+    if (err?.code === 'ENOENT') {
+      inMemoryStore = [];
+      return [];
+    }
+    console.warn('cert-store: error reading certificates file, using memory fallback:', err?.message || err);
+    inMemoryStore = [];
+    useMemoryStore = true;
     return [];
   }
 }
 
 export async function writeCerts(certificates: CertRecord[]) {
+  if (useMemoryStore) {
+    inMemoryStore = certificates;
+    // Do not throw — persist in-memory for the current instance only.
+    console.warn('cert-store: write skipped, using in-memory store (read-only filesystem)');
+    return;
+  }
   await ensureDataDir();
-  await fs.writeFile(CERT_PATH, JSON.stringify(certificates, null, 2), 'utf8');
+  try {
+    await fs.writeFile(CERT_PATH, JSON.stringify(certificates, null, 2), 'utf8');
+    inMemoryStore = certificates;
+  } catch (err: any) {
+    console.warn('cert-store: failed to write to disk, switching to in-memory store:', err?.message || err);
+    useMemoryStore = true;
+    inMemoryStore = certificates;
+  }
 }
 
 export async function addCert(cert: CertRecord) {
