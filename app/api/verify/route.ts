@@ -37,15 +37,13 @@ function levenshtein(a: string, b: string) {
   }
   return dp[n];
 }
-// Helper to extract fields from text
+// Enhanced helper to extract fields from text with better name recognition
 function extractFieldsFromText(text: string, inputName?: string): { name?: string; email?: string } {
   const lines = text.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
   let name: string | undefined = undefined;
   let email: string | undefined = undefined;
 
   const normInputTokens = (inputName || "").toUpperCase().replace(/\s+/g, " ").trim().split(" ").filter(Boolean);
-
-  // ...existing code...
 
   // Helper: simple tokenization of alphabetic words
   function alphaTokens(s: string) {
@@ -63,53 +61,144 @@ function extractFieldsFromText(text: string, inputName?: string): { name?: strin
     }
   }
 
-  // Score candidate name lines to prefer real person names over labels like "APPLICATION NUMBER"
+  // Enhanced name pattern detection
+  function findNamePatterns(text: string, inputTokens: string[]): string[] {
+    const candidates: string[] = []
+    
+    // Look for common name patterns in certificates
+    const namePatterns = [
+      /(?:name[:\s]+|student[:\s]+|candidate[:\s]+|applicant[:\s]+)([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)/gi,
+      /(?:this\s+is\s+to\s+certify\s+that\s+)([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)/gi,
+      /(?:presented\s+to\s+|awarded\s+to\s+)([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)/gi,
+      /(?:hereby\s+certify\s+that\s+)([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)/gi,
+    ]
+    
+    for (const pattern of namePatterns) {
+      let match
+      while ((match = pattern.exec(text)) !== null) {
+        const candidate = match[1].trim()
+        if (candidate && candidate.length > 2 && /^[A-Za-z\s]+$/.test(candidate)) {
+          candidates.push(candidate)
+        }
+      }
+    }
+    
+    // Also look for capitalized words that might be names
+    const words = text.match(/\b[A-Z][a-z]+(?:\s+[A-Z][a-z]+)*\b/g) || []
+    for (const word of words) {
+      if (word.split(' ').length >= 2 && word.split(' ').length <= 4) {
+        candidates.push(word)
+      }
+    }
+    
+    return candidates
+  }
+
+  // Enhanced scoring function for candidate name lines
   function scoreLine(l: string) {
     let score = 0;
     const up = l.toUpperCase();
-    // Strong positive signals
-    if (/\bNAME\b/.test(up) || /\bAPPLICANT\b/.test(up) || /\bSTUDENT\b/.test(up) || /\bCANDIDATE\b/.test(up)) score += 50;
-    // Negative signals: application numbers, labels, IDs
-    if (/\bAPPLICATION\b/.test(up) || /\bNUMBER\b/.test(up) || /\bID\b/.test(up) || /\bREGISTRATION\b/.test(up)) score -= 40;
-    // If the line contains many digits or long alphanumeric codes, penalize
-    const digits = (l.match(/\d/g) || []).length;
-    if (digits > 3) score -= 30;
-    if (/\bRFSCH\b|\bCERT-\b|\bREF\b/.test(up)) score -= 30;
-
     const tokens = alphaTokens(l);
-    score += Math.min(20, tokens.length * 10);
+    
+    // Strong positive signals for name contexts
+    if (/\b(?:NAME|APPLICANT|STUDENT|CANDIDATE|RECIPIENT|AWARDED TO|PRESENTED TO)\b/.test(up)) score += 50;
+    if (/\b(?:THIS IS TO CERTIFY|HEREBY CERTIFY|CERTIFICATE OF)\b/.test(up)) score += 40;
+    
+    // Negative signals: administrative text, IDs, numbers
+    if (/\b(?:APPLICATION|NUMBER|ID|REGISTRATION|SERIAL|CODE|REF)\b/.test(up)) score -= 40;
+    if (/\b(?:SCHOLARSHIP|PROGRAM|COURSE|SUBJECT|MARKS|GRADE|CGPA|PERCENTAGE)\b/.test(up)) score -= 30;
+    if (/\b(?:DATE|YEAR|MONTH|SIGNATURE|SEAL|PRINCIPAL|DIRECTOR)\b/.test(up)) score -= 25;
+    
+    // Penalize lines with too many digits or special characters
+    const digits = (l.match(/\d/g) || []).length;
+    const specialChars = (l.match(/[^\w\s]/g) || []).length;
+    if (digits > 3) score -= 30;
+    if (specialChars > 2) score -= 20;
+    if (/\b(?:RFSCH|CERT-|REF|BATCH|ROLL)\b/.test(up)) score -= 30;
 
-    // token overlap with inputName increases score
+    // Reward proper name-like structure (2-4 capitalized words)
+    if (tokens.length >= 2 && tokens.length <= 4) score += 30;
+    if (tokens.length > 4) score -= 10; // Too many tokens, likely not a name
+    
+    // Check if tokens look like real names (common patterns)
+    const namePatterns = tokens.filter(t => 
+      /^[A-Z][a-z]{2,}$/.test(t) && // Proper capitalization
+      t.length >= 3 && t.length <= 15 && // Reasonable length
+      !/^(THE|AND|OF|IN|AT|ON|FOR|WITH|BY)$/i.test(t) // Not common words
+    );
+    score += namePatterns.length * 15;
+
+    // Token overlap with input name (with fuzzy matching)
     if (normInputTokens.length > 0 && tokens.length > 0) {
       const upTokens = tokens.map(t => t.toUpperCase());
-      // count exact and fuzzy overlaps
       let overlap = 0;
+      let fuzzyOverlap = 0;
+      
       for (const it of normInputTokens) {
-        if (upTokens.includes(it)) { overlap += 1; continue; }
-        // fuzzy: allow small Levenshtein distance up to 1 for short tokens or 2 for longer
+        if (upTokens.includes(it)) { 
+          overlap += 1; 
+          continue; 
+        }
+        // Enhanced fuzzy matching
         for (const ut of upTokens) {
           const d = levenshtein(it, ut);
-          if ((ut.length <= 4 && d <= 1) || (ut.length > 4 && d <= 2)) { overlap += 1; break; }
+          const maxDistance = Math.max(1, Math.floor(Math.min(it.length, ut.length) * 0.3));
+          if (d <= maxDistance) { 
+            fuzzyOverlap += 1; 
+            break; 
+          }
         }
       }
-      score += overlap * 25;
+      
+      score += overlap * 30; // Exact matches are very valuable
+      score += fuzzyOverlap * 15; // Fuzzy matches are also good
     }
 
-    // Penalize lines that look like labels only (short tokens like "NAME" alone)
-    if (/^[A-Z\s]{1,20}$/.test(up) && alphaTokens(l).length <= 1) score -= 10;
+    // Penalize obvious non-name patterns
+    if (/^[A-Z\s]{1,20}$/.test(up) && tokens.length <= 1) score -= 15;
+    if (l.length > 100) score -= 20; // Too long to be just a name
+    if (l.length < 5) score -= 10; // Too short to be a full name
 
     return score;
   }
 
-  // Build candidates and choose best-scoring line
-  // Build candidates, but also split candidate lines into fragments if they contain multiple names
+  // Enhanced candidate extraction with multiple strategies
+  let candidates: Array<{ name: string; score: number; source: string }> = [];
+  
+  // Strategy 1: Pattern-based name extraction
+  const patternNames = findNamePatterns(text, normInputTokens);
+  for (const pname of patternNames) {
+    const score = scoreLine(pname) + 20; // Bonus for pattern match
+    candidates.push({ name: pname, score, source: 'pattern' });
+  }
+  
+  // Strategy 2: Line-by-line analysis with fragments
   let fragments: Array<{ fragment: string; score: number }> = [];
   for (const l of lines) {
     const base = normalizeText(l);
+    
+    // Extract name from common certificate phrases
+    const certPhrases = [
+      /(?:this\s+is\s+to\s+certify\s+that\s+)(.+?)(?:\s+has\s+|$)/i,
+      /(?:presented\s+to\s+|awarded\s+to\s+)(.+?)(?:\s+for\s+|$)/i,
+      /(?:name\s*[:\-]\s*)(.+?)(?:\s*(?:roll|id|class|course)|$)/i,
+      /(?:student\s*[:\-]\s*)(.+?)(?:\s*(?:roll|id|class|course)|$)/i,
+    ];
+    
+    for (const phrase of certPhrases) {
+      const match = base.match(phrase);
+      if (match && match[1]) {
+        const extracted = match[1].trim();
+        if (extracted.length > 2 && extracted.length < 100) {
+          fragments.push({ fragment: extracted, score: scoreLine(extracted) + 30 });
+        }
+      }
+    }
+    
     // If line contains parenthetical ID like (24CE55), extract substring before '(' as likely name section
     const preParen = base.split('(')[0].trim();
-    // Split by common separators (comma, semicolon, ' and ', '/') to handle multiple names on one line
-    const parts = preParen.split(/,|;|\band\b|\//i).map(p => p.trim()).filter(Boolean);
+    // Split by common separators to handle multiple names on one line
+    const parts = preParen.split(/,|;|\sand\s|\//i).map(p => p.trim()).filter(Boolean);
     for (const p of parts) {
       const sc = scoreLine(p);
       fragments.push({ fragment: p, score: sc });
@@ -119,22 +208,45 @@ function extractFieldsFromText(text: string, inputName?: string): { name?: strin
   }
 
   fragments.sort((a, b) => b.score - a.score);
-  if (fragments.length > 0 && fragments[0].score > -20) {
-    const bestFrag = fragments[0].fragment;
-    // If fragment contains colon/dash, take after it
-    const colonMatch = bestFrag.match(/[:\-]\s*(.+)$/);
-    let candidate = colonMatch ? colonMatch[1].trim() : bestFrag;
-    // Prefer alpha tokens joining (ignore stray words like "CE" or "organized")
-    const tokens = alphaTokens(candidate).map(t => normalizeText(t));
-    if (tokens.length >= 2) {
-      name = tokens.join(' ');
-    } else if (tokens.length === 1 && normInputTokens.length > 0) {
-      const t = tokens[0];
-      if (t && normInputTokens.includes(t.toUpperCase())) name = t;
-    } else {
-      // last resort: accept the raw candidate trimmed
-      name = candidate.trim();
+  
+  // Convert top fragments to candidates
+  for (let i = 0; i < Math.min(5, fragments.length); i++) {
+    const frag = fragments[i];
+    if (frag.score > -10) {
+      const bestFrag = frag.fragment;
+      // If fragment contains colon/dash, take after it
+      const colonMatch = bestFrag.match(/[:\-]\s*(.+)$/);
+      let candidate = colonMatch ? colonMatch[1].trim() : bestFrag;
+      
+      // Clean up the candidate
+      const tokens = alphaTokens(candidate).map(t => normalizeText(t));
+      if (tokens.length >= 2) {
+        const cleanName = tokens.join(' ');
+        candidates.push({ name: cleanName, score: frag.score, source: 'fragment' });
+      } else if (tokens.length === 1 && normInputTokens.length > 0) {
+        const t = tokens[0];
+        if (t && normInputTokens.includes(t.toUpperCase())) {
+          candidates.push({ name: t, score: frag.score, source: 'single-token' });
+        }
+      } else if (candidate.trim().length > 5) {
+        // last resort: accept the raw candidate trimmed
+        candidates.push({ name: candidate.trim(), score: frag.score - 10, source: 'raw' });
+      }
     }
+  }
+  
+  // Strategy 3: Direct input name search in text
+  if (normInputTokens.length > 0) {
+    const fullInputName = normInputTokens.join(' ');
+    if (text.toUpperCase().includes(fullInputName.toUpperCase())) {
+      candidates.push({ name: inputName || '', score: 100, source: 'direct-match' });
+    }
+  }
+  
+  // Choose the best candidate
+  candidates.sort((a, b) => b.score - a.score);
+  if (candidates.length > 0 && candidates[0].score > -5) {
+    name = candidates[0].name;
   }
 
   // Email: look for email pattern
@@ -227,8 +339,13 @@ export async function POST(req: NextRequest) {
       }
 
       // Build verify input and run verification
-      const verifyInput = { name: inputName, extractedName: chosenExtractedName, file: { bytes: Buffer.alloc(0), filename } };
-      const verifyOut = await verifyDocument(verifyInput as any);
+      const verifyInput = { 
+        name: inputName, 
+        extractedName: chosenExtractedName, 
+        extractedText: text,
+        file: { bytes: Buffer.alloc(0).buffer as ArrayBuffer, filename } 
+      };
+      const verifyOut = await verifyDocument(verifyInput);
 
       const result = {
         ...verifyOut,
@@ -244,7 +361,7 @@ export async function POST(req: NextRequest) {
         const logPath = path.join(process.cwd(), "logs.json");
         let logs: any[] = [];
         try { const data = await fs.readFile(logPath, 'utf8'); logs = JSON.parse(data); } catch {}
-        logs.push({ date: new Date().toISOString(), input: { name: inputName, email: inputEmail }, extracted, matches: { name: verifyOut.ownerStatus.pass }, file: filename || null, extractionSource });
+        logs.push({ date: new Date().toISOString(), input: { name: inputName, email: inputEmail }, extracted, matches: { name: verifyOut.authenticity.pass, eligibility: verifyOut.eligibility.pass }, file: filename || null, extractionSource });
         await fs.writeFile(logPath, JSON.stringify(logs, null, 2), 'utf8');
       } catch (e) {}
 
@@ -317,88 +434,11 @@ export async function POST(req: NextRequest) {
           extracted = extractFieldsFromText(text);
           extractionSource = "pdf-text";
         } else {
-          // Fallback: OCR for all images in all pages
-          try {
-            // Attempt to load a Node-friendly legacy build of pdfjs at runtime.
-            // Construct the module path dynamically so Next's build doesn't statically resolve it.
-              // Try explicit, static imports in order to avoid webpack's
-              // "request of a dependency is an expression" warning and to
-              // make resolution predictable in Node. We try a few known
-              // pdfjs-dist entry points that work in different installs.
-              let pdfjsLib: any = null;
-              let getDocument: any = null;
-              let OPS: any = null;
-              try {
-                // Prefer the legacy ESM build when available
-                pdfjsLib = await import('pdfjs-dist/legacy/build/pdf.mjs');
-              } catch (e1) {
-                try {
-                  // Fallback to the top-level package; some installs expose APIs there
-                  pdfjsLib = await import('pdfjs-dist');
-                } catch (e3) {
-                  throw new Error('PDF OCR fallback unavailable: pdfjs-dist not installed or failed to initialize. Install pdfjs-dist or provide a text-based PDF.');
-                }
-              }
-              getDocument = pdfjsLib.getDocument || pdfjsLib.getDocument?.default || pdfjsLib.default?.getDocument;
-              OPS = pdfjsLib.OPS || (pdfjsLib as any).ops || null;
-              if (!getDocument) throw new Error('pdfjs-dist getDocument not available');
-              const doc = await getDocument({ data: buffer }).promise;
-              let ocrTexts: string[] = [];
-              const numPages = doc.numPages;
-              for (let pageNum = 1; pageNum <= numPages; pageNum++) {
-                const page = await doc.getPage(pageNum);
-                  // Try to extract raster images from the page. pdfjs exposes
-                  // different internal APIs depending on build; we try a few
-                  // safe patterns without relying on computed module requests.
-                  try {
-                    const ops = await page.getOperatorList();
-                    let imgData = null;
-                    for (let i = 0; i < ops.fnArray.length; i++) {
-                      // OPS may be undefined on some builds; guard access
-                      if (OPS && ops.fnArray[i] === OPS.paintImageXObject) {
-                        const imgName = ops.argsArray[i][0];
-                        // page.objs.get may be synchronous or async depending on build
-                        imgData = await page.objs.get(imgName);
-                      }
-                      if (imgData) {
-                        // Use a static import for pngjs to keep the bundler happy
-                        const { PNG } = await import('pngjs');
-                        const png = new PNG({ width: imgData.width, height: imgData.height });
-                        png.data = imgData.data;
-                        const chunks: Buffer[] = [];
-                        png.pack().on('data', (chunk: Buffer) => chunks.push(chunk));
-                        await new Promise((resolve) => png.on('end', resolve));
-                        const pngBuffer = Buffer.concat(chunks);
-                        const formData = new FormData();
-                        formData.append('file', new Blob([pngBuffer]), `page${pageNum}.png`);
-                        try {
-                          const ocrRes = await fetchOcrWithRetry(formData, 2);
-                          const ocrData = await ocrRes.json();
-                          ocrTexts.push(ocrData.text || "");
-                        } catch (ocrPageErr) {
-                          console.warn('OCR page upload failed for page', pageNum, ocrPageErr);
-                        }
-                      }
-                    }
-                  } catch (pageImgErr) {
-                    // If image extraction fails for this page, continue to next page
-                    console.warn('pdfjs page image extraction failed for page', pageNum, pageImgErr);
-                  }
-              }
-              text = ocrTexts.join("\n");
-              extracted = extractFieldsFromText(text);
-              extractionSource = "pdf-ocr";
-          } catch (pdfOcrErr) {
-            // Don't throw a hard error here; PDF OCR fallback may fail in some environments
-            // (pdfjs not available or image-only PDFs). Log the problem, mark extraction
-            // source, and continue to attempt DB/filename/text-based fallbacks so we
-            // can still return a deterministic VerificationResult rather than a 400.
-            console.error("PDF extraction error (pdf-parse or pdf-ocr):", pdfParseError || pdfOcrErr);
-            extractionSource = extractionSource ? extractionSource + ",pdf-ocr-failed" : "pdf-ocr-failed";
-            // Clear any transient OCR text so downstream heuristics use DB/filename fallbacks
-            text = "";
-            extracted = {};
-          }
+          // PDF has no extractable text - log and continue with empty text
+          console.log('PDF contains no extractable text, continuing with text-based verification');
+          text = "";
+          extracted = {};
+          extractionSource = "pdf-no-text";
         }
       }
 
@@ -606,7 +646,7 @@ export async function POST(req: NextRequest) {
           date: new Date().toISOString(),
           input: { name: inputName, email: inputEmail },
           extracted,
-          matches: { name: verifyOut.ownerStatus.pass, email: !!extracted.email && (extracted.email || "") === (inputEmail || "") },
+          matches: { name: verifyOut.authenticity.pass, email: !!extracted.email && (extracted.email || "") === (inputEmail || "") },
           file: filename || null,
           extractionSource,
         });

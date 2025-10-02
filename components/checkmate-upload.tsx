@@ -12,15 +12,26 @@ import { VerificationReport } from "@/components/verification-report"
 import { cn } from "@/lib/utils"
 
 type VerificationResult = {
-  ownerStatus: { pass: boolean; detail: string }
-  mathLogic: { pass: boolean; detail: string }
+  authenticity: { pass: boolean; detail: string; score: number }
+  eligibility: { pass: boolean; detail: string; score: number }
+  mathLogic: { pass: boolean; detail: string; formula: string }
   truthTable: {
-    A: 0 | 1
-    Y: 0 | 1
-    table: Array<{ A: 0 | 1; Y: 0 | 1 }>
+    A: 0 | 1 // Authenticity
+    E: 0 | 1 // Eligibility  
+    Y: 0 | 1 // Final Decision (Y = A ∧ E)
+    table: Array<{ A: 0 | 1; E: 0 | 1; Y: 0 | 1 }>
   }
   finalDecision: "allowed" | "denied"
   normalizedNames: { input: string; extracted?: string }
+  verificationDetails: {
+    nameMatch: { exact: boolean; score: number; method: string }
+    documentAnalysis: { 
+      hasValidStructure: boolean
+      containsExpectedFields: boolean
+      suspiciousPatterns: string[]
+    }
+    eligibilityFactors: string[]
+  }
   // Diagnostics added by backend for debugging extraction
   extractionSource?: string
   textSample?: string
@@ -260,7 +271,7 @@ export function CheckmateUpload() {
           {result ? <VerificationReport result={result} inputName={name} /> : null}
 
           {/* Diagnostics box: show extraction source, text sample, extracted fields and raw JSON */}
-          {result && result.ownerStatus && result.ownerStatus.pass === false ? (
+          {result && (!result.authenticity?.pass || !result.eligibility?.pass) ? (
             <div className="mt-4 p-3 border rounded bg-muted/30">
               <div className="flex items-center justify-between">
                 <div>
