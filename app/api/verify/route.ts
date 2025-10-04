@@ -65,9 +65,12 @@ function extractFieldsFromText(text: string, inputName?: string): { name?: strin
   function findNamePatterns(text: string, inputTokens: string[]): string[] {
     const candidates: string[] = []
     
-    // Look for common name patterns in certificates
+    // Look for common name patterns in certificates (handle both upper and mixed case)
     const namePatterns = [
-      /(?:name[:\s]+|student[:\s]+|candidate[:\s]+|applicant[:\s]+)([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)/gi,
+      /(?:name[:\s]+)([A-Z][A-Z\s]+)(?:\s+Candidate|\s+Address|$)/gi, // "Name: MEHTA HEET HITESH"
+      /(?:name[:\s]+)([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)/gi, // "Name: Mehta Heet Hitesh"
+      /(?:student[:\s]+|candidate[:\s]+|applicant[:\s]+)([A-Z][A-Z\s]+)/gi,
+      /(?:student[:\s]+|candidate[:\s]+|applicant[:\s]+)([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)/gi,
       /(?:this\s+is\s+to\s+certify\s+that\s+)([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)/gi,
       /(?:presented\s+to\s+|awarded\s+to\s+)([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)/gi,
       /(?:hereby\s+certify\s+that\s+)([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)/gi,
@@ -177,12 +180,14 @@ function extractFieldsFromText(text: string, inputName?: string): { name?: strin
   for (const l of lines) {
     const base = normalizeText(l);
     
-    // Extract name from common certificate phrases
+    // Extract name from common certificate phrases - IMPROVED for "Name: MEHTA HEET HITESH" format
     const certPhrases = [
+      /(?:name\s*[:\-]\s*)([A-Z][A-Z\s]+?)(?:\s+candidate\s+details|\s+address|\s+roll|\s+id|\s+class|\s+course|$)/i, // "Name: MEHTA HEET HITESH Candidate Details"
+      /(?:name\s*[:\-]\s*)([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)(?:\s+candidate|\s+address|\s+roll|\s+id|\s+class|\s+course|$)/i, // "Name: Mehta Heet Hitesh"
+      /(?:student\s*[:\-]\s*)([A-Z][A-Z\s]+?)(?:\s+candidate|\s+address|\s+roll|\s+id|\s+class|\s+course|$)/i,
+      /(?:student\s*[:\-]\s*)([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)(?:\s+candidate|\s+address|\s+roll|\s+id|\s+class|\s+course|$)/i,
       /(?:this\s+is\s+to\s+certify\s+that\s+)(.+?)(?:\s+has\s+|$)/i,
       /(?:presented\s+to\s+|awarded\s+to\s+)(.+?)(?:\s+for\s+|$)/i,
-      /(?:name\s*[:\-]\s*)(.+?)(?:\s*(?:roll|id|class|course)|$)/i,
-      /(?:student\s*[:\-]\s*)(.+?)(?:\s*(?:roll|id|class|course)|$)/i,
     ];
     
     for (const phrase of certPhrases) {

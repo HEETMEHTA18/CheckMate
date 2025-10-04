@@ -23,6 +23,34 @@ type VerificationResult = {
     }
     eligibilityFactors: string[]
   }
+  // Enhanced discrete mathematics features
+  discreteMathAnalysis?: {
+    setTheory: {
+      inputTokenSet: string[]
+      extractedTokenSet: string[]
+      intersection: string[]
+      union: string[]
+      jaccardSimilarity: number
+      setDifference: string[]
+    }
+    probabilityTheory: {
+      bayesianConfidence: number
+      priorProbability: number
+      likelihood: number
+      posteriorProbability: number
+      confidenceInterval: [number, number]
+    }
+    combinatorics: {
+      possibleNamePermutations: number
+      actualMatches: number
+      combinatorialScore: number
+    }
+    booleanAlgebra: {
+      logicalOperations: string[]
+      truthTableSize: number
+      satisfiabilityScore: number
+    }
+  }
 }
 
 export function VerificationReport({ result, inputName }: { result: VerificationResult; inputName: string }) {
@@ -89,32 +117,31 @@ export function VerificationReport({ result, inputName }: { result: Verification
 
           {/* Step-by-step details */}
           <section className="space-y-2">
-            <h3 className="font-semibold">CheckMate - Legal Rule Checker System</h3>
+            <h3 className="font-semibold">CheckMate - Your Certificate Checker</h3>
             <p className="text-sm text-muted-foreground">
-              This verification system authenticates academic documents and validates eligibility using <strong>Discrete Mathematics</strong>. 
-              The system applies propositional logic with the formula Y = A ∧ E, where admission is granted only when both 
-              authenticity (A) and eligibility (E) conditions are satisfied.
+              We check if your certificate is real and if it matches your name correctly. 
+              We only approve certificates when both checks pass: the document must be genuine AND the name must match.
             </p>
           </section>
 
           <section className="space-y-2">
-            <h3 className="font-semibold">Mathematical Logic: Y = A ∧ E</h3>
+            <h3 className="font-semibold">How We Make Decisions</h3>
             <div className="bg-muted p-3 rounded-md text-sm">
-              <p><strong>Formula:</strong> {result.mathLogic.formula}</p>
-              <p><strong>Interpretation:</strong></p>
+              <p><strong>Simple Rule:</strong> Both checks must pass</p>
               <ul className="list-disc pl-5 mt-2 space-y-1">
-                <li>Admission is granted only when both conditions are satisfied</li>
-                <li>If the document is fake or eligibility criteria are not met → Admission is denied</li>
-                <li>Both authenticity AND eligibility must be true for admission approval</li>
+                <li>✅ <strong>Document Check:</strong> Is this certificate real?</li>
+                <li>✅ <strong>Name Check:</strong> Does the name match yours?</li>
+                <li>If both pass → You're approved ✅</li>
+                <li>If either fails → Sorry, we can't verify ❌</li>
               </ul>
             </div>
           </section>
 
           <section className="space-y-2">
-            <h3 className="font-semibold">Verification Results</h3>
+            <h3 className="font-semibold">Your Results</h3>
             <div className="text-sm space-y-3">
               <div className="border rounded-md p-3">
-                <p><strong>A (Authenticity)</strong> → {result.authenticity.pass ? "✅ PASS" : "❌ FAIL"}</p>
+                <p><strong>📄 Document Check</strong> → {result.authenticity.pass ? "✅ PASSED" : "❌ FAILED"}</p>
                 <p className="text-muted-foreground mt-1">{result.authenticity.detail}</p>
                 <div className="mt-2">
                   <p><strong>Name Analysis:</strong></p>
@@ -124,23 +151,30 @@ export function VerificationReport({ result, inputName }: { result: Verification
                     <li>Confidence Score: {result.verificationDetails.nameMatch.score}/100</li>
                   </ul>
                 </div>
-                <div className="mt-2">
-                  <p><strong>Document Structure:</strong></p>
+                                <div className="mt-2">
+                  <p><strong>Name Comparison:</strong></p>
                   <ul className="list-disc pl-5 mt-1">
-                    <li>Valid Structure: {result.verificationDetails.documentAnalysis.hasValidStructure ? 'Yes' : 'No'}</li>
-                    <li>Expected Fields Present: {result.verificationDetails.documentAnalysis.containsExpectedFields ? 'Yes' : 'No'}</li>
+                    <li>Perfect Match: {result.verificationDetails.nameMatch.exact ? 'Yes ✅' : 'No ❌'}</li>
+                    <li>Similarity Score: {result.verificationDetails.nameMatch.score}/100</li>
+                  </ul>
+                </div>
+                <div className="mt-2">
+                  <p><strong>Document Quality:</strong></p>
+                  <ul className="list-disc pl-5 mt-1">
+                    <li>Looks Real: {result.verificationDetails.documentAnalysis.hasValidStructure ? 'Yes ✅' : 'No ❌'}</li>
+                    <li>Has Required Info: {result.verificationDetails.documentAnalysis.containsExpectedFields ? 'Yes ✅' : 'No ❌'}</li>
                     {result.verificationDetails.documentAnalysis.suspiciousPatterns.length > 0 && (
-                      <li>Suspicious Patterns: {result.verificationDetails.documentAnalysis.suspiciousPatterns.join(', ')}</li>
+                      <li>Issues Found: {result.verificationDetails.documentAnalysis.suspiciousPatterns.join(', ')}</li>
                     )}
                   </ul>
                 </div>
               </div>
 
               <div className="border rounded-md p-3">
-                <p><strong>E (Eligibility)</strong> → {result.eligibility.pass ? "✅ PASS" : "❌ FAIL"}</p>
+                <p><strong>👤 Name Check</strong> → {result.eligibility.pass ? "✅ PASSED" : "❌ FAILED"}</p>
                 <p className="text-muted-foreground mt-1">{result.eligibility.detail}</p>
                 <div className="mt-2">
-                  <p><strong>Eligibility Factors:</strong></p>
+                  <p><strong>What We Checked:</strong></p>
                   <ul className="list-disc pl-5 mt-1">
                     {result.verificationDetails.eligibilityFactors.map((factor, idx) => (
                       <li key={idx}>{factor}</li>
@@ -164,38 +198,134 @@ export function VerificationReport({ result, inputName }: { result: Verification
               </p>
               
               <div className="overflow-x-auto">
-                <h4 className="font-semibold mb-2">Truth Table for Y = A ∧ E</h4>
+                <h4 className="font-semibold mb-2">Truth Table for Y = A ∧ E ∧ S ∧ T</h4>
+                <p className="text-xs text-muted-foreground mb-3">
+                  Simplified Boolean truth table showing all 4 combinations (2²). Only when both conditions are TRUE does Y = 1.
+                </p>
                 <table className="w-full text-sm border border-border rounded-md">
                   <thead>
                     <tr className="bg-muted">
-                      <th className="px-3 py-2 text-left">A (Authenticity)</th>
-                      <th className="px-3 py-2 text-left">E (Eligibility)</th>
-                      <th className="px-3 py-2 text-left">Y (Admission)</th>
+                      <th className="px-2 py-2 text-center">A</th>
+                      <th className="px-2 py-2 text-center">E</th>
+                      <th className="px-2 py-2 text-center">Y</th>
+                      <th className="px-3 py-2 text-left">Explanation</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {result.truthTable.table.map((row, idx) => (
-                      <tr key={idx} className="border-t border-border">
-                        <td className="px-3 py-2">{row.A}</td>
-                        <td className="px-3 py-2">{row.E}</td>
-                        <td className="px-3 py-2">{row.Y}</td>
-                      </tr>
-                    ))}
-                    <tr className="border-t-2 border-primary bg-accent">
-                      <td className="px-3 py-2 font-semibold">A = {result.truthTable.A}</td>
-                      <td className="px-3 py-2 font-semibold">E = {result.truthTable.E}</td>
-                      <td className="px-3 py-2 font-semibold">Y = {result.truthTable.Y}</td>
-                    </tr>
+                    {result.truthTable.table.map((row, idx) => {
+                      const isCurrentState = row.A === result.truthTable.A && 
+                                            row.E === result.truthTable.E;
+                      const isVerifiedRow = row.A === 1 && row.E === 1;
+                      
+                      return (
+                        <tr key={idx} className={`border-t border-border ${
+                          isCurrentState ? 'bg-blue-50 dark:bg-blue-950/20 border-blue-300' : 
+                          isVerifiedRow ? 'bg-green-50 dark:bg-green-950/20' : ''
+                        }`}>
+                          <td className="px-2 py-2 text-center font-mono">{row.A}</td>
+                          <td className="px-2 py-2 text-center font-mono">{row.E}</td>
+                          <td className={`px-2 py-2 text-center font-mono font-bold ${
+                            row.Y === 1 ? 'text-green-600' : 'text-red-600'
+                          }`}>{row.Y}</td>
+                          <td className="px-3 py-2 text-xs">
+                            {isCurrentState && '← Current State: '}
+                            {isVerifiedRow ? 'Both conditions satisfied - VERIFIED' : 
+                             row.A === 0 ? 'Authenticity failed' :
+                             row.E === 0 ? 'Eligibility failed' :
+                             'At least one condition failed'}
+                          </td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
+                
+                <div className="mt-4 p-3 bg-slate-50 dark:bg-slate-800 rounded-md">
+                  <h5 className="font-semibold text-sm mb-2">Current Verification State:</h5>
+                  <div className="grid grid-cols-3 gap-4 text-xs">
+                    <div className={`p-3 rounded ${result.truthTable.A ? 'bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300' : 'bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-300'}`}>
+                      <strong>A = {result.truthTable.A}</strong><br/>
+                      {result.truthTable.A ? 'Authentic ✓' : 'Not Authentic ✗'}
+                    </div>
+                    <div className={`p-3 rounded ${result.truthTable.E ? 'bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300' : 'bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-300'}`}>
+                      <strong>E = {result.truthTable.E}</strong><br/>
+                      {result.truthTable.E ? 'Eligible ✓' : 'Not Eligible ✗'}
+                    </div>
+                    <div className={`p-3 rounded ${result.truthTable.Y ? 'bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300' : 'bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-300'}`}>
+                      <strong>Y = {result.truthTable.Y}</strong><br/>
+                      {result.truthTable.Y ? 'ADMITTED ✓' : 'DENIED ✗'}
+                    </div>
+                  </div>
+                </div>
               </div>
             </div>
           </section>
 
+          {/* Discrete Mathematics Analysis */}
+          {result.discreteMathAnalysis && (
+            <section className="space-y-4">
+              <h3 className="font-semibold">🧮 Discrete Mathematics Analysis</h3>
+              <p className="text-xs text-muted-foreground">
+                Enhanced analysis based on Kenneth H. Rosen's "Discrete Mathematics and Its Applications"
+              </p>
+              
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {/* Set Theory */}
+                <div className="border rounded-md p-3 bg-blue-50/50 dark:bg-blue-950/20">
+                  <h4 className="font-semibold text-sm mb-2 text-blue-800 dark:text-blue-300">🔢 Set Theory Analysis</h4>
+                  <div className="text-xs space-y-1">
+                    <p><strong>Input Set:</strong> {"{" + result.discreteMathAnalysis.setTheory.inputTokenSet.join(", ") + "}"}</p>
+                    <p><strong>Document Set:</strong> {"{" + result.discreteMathAnalysis.setTheory.extractedTokenSet.join(", ") + "}"}</p>
+                    <p><strong>Intersection:</strong> {"{" + result.discreteMathAnalysis.setTheory.intersection.join(", ") + "}"}</p>
+                    <p><strong>Union:</strong> {"{" + result.discreteMathAnalysis.setTheory.union.join(", ") + "}"}</p>
+                    <p><strong>Jaccard Similarity:</strong> {result.discreteMathAnalysis.setTheory.jaccardSimilarity.toFixed(3)}</p>
+                  </div>
+                </div>
+
+                {/* Probability Theory */}
+                <div className="border rounded-md p-3 bg-green-50/50 dark:bg-green-950/20">
+                  <h4 className="font-semibold text-sm mb-2 text-green-800 dark:text-green-300">📊 Probability Theory</h4>
+                  <div className="text-xs space-y-1">
+                    <p><strong>Bayesian Confidence:</strong> {result.discreteMathAnalysis.probabilityTheory.bayesianConfidence.toFixed(1)}%</p>
+                    <p><strong>Prior Probability:</strong> {result.discreteMathAnalysis.probabilityTheory.priorProbability.toFixed(3)}</p>
+                    <p><strong>Likelihood:</strong> {result.discreteMathAnalysis.probabilityTheory.likelihood.toFixed(3)}</p>
+                    <p><strong>Posterior:</strong> {result.discreteMathAnalysis.probabilityTheory.posteriorProbability.toFixed(3)}</p>
+                    <p><strong>Confidence Interval:</strong> [{result.discreteMathAnalysis.probabilityTheory.confidenceInterval[0].toFixed(1)}%, {result.discreteMathAnalysis.probabilityTheory.confidenceInterval[1].toFixed(1)}%]</p>
+                  </div>
+                </div>
+
+                {/* Combinatorics */}
+                <div className="border rounded-md p-3 bg-purple-50/50 dark:bg-purple-950/20">
+                  <h4 className="font-semibold text-sm mb-2 text-purple-800 dark:text-purple-300">🎲 Combinatorics</h4>
+                  <div className="text-xs space-y-1">
+                    <p><strong>Possible Permutations:</strong> {result.discreteMathAnalysis.combinatorics.possibleNamePermutations}!</p>
+                    <p><strong>Actual Matches:</strong> {result.discreteMathAnalysis.combinatorics.actualMatches}</p>
+                    <p><strong>Combinatorial Score:</strong> {result.discreteMathAnalysis.combinatorics.combinatorialScore.toFixed(1)}%</p>
+                  </div>
+                </div>
+
+                {/* Boolean Algebra */}
+                <div className="border rounded-md p-3 bg-orange-50/50 dark:bg-orange-950/20">
+                  <h4 className="font-semibold text-sm mb-2 text-orange-800 dark:text-orange-300">⚡ Boolean Algebra</h4>
+                  <div className="text-xs space-y-1">
+                    <p><strong>Truth Table Size:</strong> {result.discreteMathAnalysis.booleanAlgebra.truthTableSize} combinations (2⁴)</p>
+                    <p><strong>Satisfiability Score:</strong> {result.discreteMathAnalysis.booleanAlgebra.satisfiabilityScore.toFixed(1)}%</p>
+                    <p><strong>Logical Operations:</strong></p>
+                    <ul className="list-disc list-inside pl-2 space-y-0">
+                      {result.discreteMathAnalysis.booleanAlgebra.logicalOperations.slice(0, 3).map((op, idx) => (
+                        <li key={idx} className="font-mono text-[10px]">{op}</li>
+                      ))}
+                    </ul>
+                  </div>
+                </div>
+              </div>
+            </section>
+          )}
+
           <section className="space-y-2">
             <h3 className="font-semibold">Conclusion</h3>
             <p className="text-sm text-muted-foreground">
-              Final Decision: Admission = A → {result.truthTable.A} = {result.truthTable.Y} {" "}
+              Final Decision: Y = A ∧ E → {result.truthTable.A} ∧ {result.truthTable.E} = {result.truthTable.Y} {" "}
               —{" "}
               <span className={decisionOk ? "text-primary" : "text-destructive"}>
                 {decisionOk ? "Admission Allowed ✅" : "Admission Denied ❌"}
